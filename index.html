@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hackathon Judging</title>
+<style>
+  :root {
+    color-scheme: light;
+    --bg:#f7f7f5; --card:#fff; --ink:#1a1a1a; --muted:#6b6b6b;
+    --accent:#c96442; --line:#e6e2dc; --ok:#2e7d4f;
+  }
+  *{box-sizing:border-box;margin:0}
+  body{background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;min-height:100vh;padding:32px 16px}
+  .wrap{max-width:560px;margin:0 auto}
+  header{text-align:center;margin-bottom:28px}
+  header h1{font-size:26px;font-weight:700;letter-spacing:-.02em}
+  header p{color:var(--muted);margin-top:6px;font-size:14px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:24px;box-shadow:0 1px 3px rgba(0,0,0,.04);margin-bottom:16px}
+  label.field{display:block;font-size:13px;font-weight:600;margin-bottom:6px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+  input[type=text],select,textarea{width:100%;padding:12px 14px;font-size:16px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink);margin-bottom:18px}
+  input:focus,select:focus,textarea:focus{outline:2px solid var(--accent);border-color:transparent}
+  .criterion{padding:16px 0;border-top:1px solid var(--line)}
+  .criterion h3{font-size:15px;font-weight:600}
+  .criterion p{font-size:13px;color:var(--muted);margin:4px 0 12px}
+  .scale{display:flex;gap:8px}
+  .scale button{flex:1;padding:12px 0;font-size:16px;font-weight:600;border-radius:10px;border:1px solid var(--line);background:#fff;color:var(--ink);cursor:pointer;transition:all .12s}
+  .scale button:hover{border-color:var(--accent)}
+  .scale button.sel{background:var(--accent);border-color:var(--accent);color:#fff}
+  .scale-labels{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-top:6px}
+  .btn{width:100%;padding:15px;font-size:16px;font-weight:700;border:none;border-radius:12px;background:var(--accent);color:#fff;cursor:pointer;margin-top:8px}
+  .btn.sec{background:#eee9e2;color:var(--ink)}
+  .btn:disabled{opacity:.45;cursor:not-allowed}
+  .banner{padding:12px 16px;border-radius:10px;font-size:14px;margin-bottom:16px;display:none}
+  .banner.ok{display:block;background:#e6f2ea;color:var(--ok)}
+  .banner.err{display:block;background:#fbe9e5;color:#b3402a}
+  .foot{text-align:center;color:var(--muted);font-size:12px;margin-top:24px}
+  .foot a{color:var(--muted)}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line)}
+  th{font-size:12px;text-transform:uppercase;color:var(--muted);letter-spacing:.05em}
+  td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+  .rank1 td{font-weight:700}
+  .formula{font-family:ui-monospace,Menlo,monospace;font-size:12.5px;background:#f2efe9;border-radius:8px;padding:10px 12px;margin-top:14px;color:#444}
+  .linkbox{font-family:monospace;font-size:12px;background:#f2efe9;border-radius:8px;padding:10px 12px;word-break:break-all;margin-bottom:10px}
+  .hidden{display:none!important}
+  .spin{text-align:center;color:var(--muted);padding:20px}
+  h2{font-size:18px;margin-bottom:12px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>🏆 Hackathon Judging</h1>
+    <p id="subtitle">Score each project from 1 (poor) to 5 (outstanding)</p>
+  </header>
+
+  <div id="banner" class="banner"></div>
+
+  <!-- FIRST-RUN SETUP (organizer, only when no board exists yet) -->
+  <div id="setup" class="card hidden">
+    <h2>Set up your scoreboard</h2>
+    <p style="font-size:14px;color:var(--muted);margin-bottom:16px">Enter your teams (one per line). This creates the shared scoreboard — takes one click.</p>
+    <textarea id="setupTeams" rows="6" placeholder="Team Rocket&#10;The Admins&#10;Paper Pushers"></textarea>
+    <button class="btn" id="createBtn" onclick="createBoard()">Create scoreboard</button>
+  </div>
+
+  <!-- ADMIN -->
+  <div id="admin" class="card hidden">
+    <h2>Organizer</h2>
+    <label class="field">Judge link (share this)</label>
+    <div class="linkbox" id="judgeLink"></div>
+    <button class="btn sec" onclick="copyLink('judge')">Copy judge link</button>
+    <button class="btn sec" onclick="copyLink('admin')" style="margin-top:6px">Copy organizer link (keep private)</button>
+    <div style="margin-top:20px">
+      <label class="field">Teams (one per line — saves for everyone)</label>
+      <textarea id="adminTeams" rows="6"></textarea>
+      <button class="btn sec" onclick="saveTeams()">Save teams</button>
+    </div>
+    <div style="margin-top:20px">
+      <h2>Leaderboard</h2>
+      <div id="boardBody" class="spin">Loading…</div>
+      <div class="formula">Final = (Impact÷5×30) + (Technical÷5×25) + (Product÷5×20) + (Originality÷5×15) + (Demo÷5×10) → score /100</div>
+      <button class="btn sec" onclick="exportCsv()" style="margin-top:12px">Download all scores (CSV for Excel)</button>
+      <button class="btn sec" onclick="refreshBoard()" style="margin-top:6px">Refresh</button>
+    </div>
+  </div>
+
+  <!-- JUDGE FORM -->
+  <div id="form" class="card hidden">
+    <label class="field" for="judge">Your name</label>
+    <input type="text" id="judge" placeholder="e.g. Priya Sharma" autocomplete="name">
+    <label class="field" for="team">Team</label>
+    <select id="team"><option value="">Select a team…</option></select>
+    <div id="criteria"></div>
+    <button class="btn" id="submitBtn" onclick="submitScore()">Submit score</button>
+  </div>
+
+  <div id="loading" class="card spin">Loading…</div>
+  <div class="foot" id="foot"></div>
+</div>
+
+<script>
+const KV = 'https://kvdb.io';
+const CRITERIA = [
+  {key:'impact',      name:'Real-World Impact',   desc:'Does the solution meaningfully improve a difficult administrative process?', w:30},
+  {key:'technical',   name:'Technical Execution', desc:'Does the product work, and has the team used AI thoughtfully?',              w:25},
+  {key:'product',     name:'Product Quality',     desc:'Is the experience useful, clear, and appropriate for its intended users?',   w:20},
+  {key:'originality', name:'Originality',         desc:'Does the project bring a fresh or compelling approach to the problem?',      w:15},
+  {key:'demo',        name:'Demo',                desc:'Does the presentation clearly show the problem, solution, and outcome?',     w:10},
+];
+const picked = {};
+const params = new URLSearchParams(location.hash.slice(1));
+let bucket = params.get('b') || '';
+const isAdmin = params.get('admin') === '1';
+const esc = s => String(s).replace(/</g,'&lt;');
+const totalOf = s => CRITERIA.reduce((t,c)=> t + Number(s[c.key])/5*c.w, 0);
+
+function show(id, on=true){ document.getElementById(id).classList.toggle('hidden', !on); }
+function banner(msg, err){ const b=document.getElementById('banner'); b.textContent=msg; b.className='banner '+(err?'err':'ok'); if(!err) setTimeout(()=>b.className='banner',5000); }
+
+async function createBoard(){
+  const teams = document.getElementById('setupTeams').value.split('\n').map(t=>t.trim()).filter(Boolean);
+  if(!teams.length) return banner('Add at least one team.', true);
+  const btn=document.getElementById('createBtn'); btn.disabled=true; btn.textContent='Creating…';
+  try{
+    const r = await fetch(KV, {method:'POST', body:new URLSearchParams({email:'hackathon@example.com'})});
+    if(!r.ok) throw new Error('bucket create failed');
+    bucket = (await r.text()).trim();
+    await kvSet('teams', JSON.stringify(teams));
+    location.hash = `b=${bucket}&admin=1`;
+    location.reload();
+  }catch(e){ banner('Setup failed ('+e.message+'). Check your internet and try again.', true); btn.disabled=false; btn.textContent='Create scoreboard'; }
+}
+
+const kvSet = (key, val) => fetch(`${KV}/${bucket}/${encodeURIComponent(key)}`, {method:'POST', body:val}).then(r=>{ if(!r.ok) throw new Error('write failed'); });
+const kvGet = key => fetch(`${KV}/${bucket}/${encodeURIComponent(key)}`).then(r=> r.ok ? r.text() : null);
+async function kvAll(){
+  const r = await fetch(`${KV}/${bucket}/?values=true&format=json`);
+  if(!r.ok) throw new Error('read failed');
+  return r.json(); // [[key, value], ...]
+}
+
+function renderCriteria(){
+  document.getElementById('criteria').innerHTML = CRITERIA.map(cr=>`
+    <div class="criterion">
+      <h3>${cr.name}</h3><p>${cr.desc}</p>
+      <div class="scale" id="scale-${cr.key}">${[1,2,3,4,5].map(n=>`<button type="button" onclick="pick('${cr.key}',${n})">${n}</button>`).join('')}</div>
+      <div class="scale-labels"><span>Poor</span><span>Outstanding</span></div>
+    </div>`).join('');
+}
+function pick(key,n){ picked[key]=n; document.querySelectorAll(`#scale-${key} button`).forEach((b,i)=>b.classList.toggle('sel', i+1===n)); }
+
+async function loadTeams(){
+  const t = await kvGet('teams');
+  const teams = t ? JSON.parse(t) : [];
+  document.getElementById('team').innerHTML = '<option value="">Select a team…</option>'+teams.map(x=>`<option>${esc(x)}</option>`).join('');
+  if(isAdmin) document.getElementById('adminTeams').value = teams.join('\n');
+  return teams;
+}
+
+async function submitScore(){
+  const judge = document.getElementById('judge').value.trim();
+  const team = document.getElementById('team').value;
+  if(!judge) return banner('Please enter your name.', true);
+  if(!team) return banner('Please select a team.', true);
+  const missing = CRITERIA.filter(c=>!picked[c.key]);
+  if(missing.length) return banner('Please score: '+missing.map(c=>c.name).join(', '), true);
+  const btn=document.getElementById('submitBtn'); btn.disabled=true; btn.textContent='Submitting…';
+  try{
+    const rec = { judge, team, ts:new Date().toISOString() };
+    CRITERIA.forEach(c=>rec[c.key]=picked[c.key]);
+    await kvSet(`score:${team}|${judge}`, JSON.stringify(rec)); // one key per judge+team; re-submit overwrites
+    banner(`✓ Saved — ${team}: ${(Math.round(totalOf(rec)*10)/10)} / 100. You can score the next team.`);
+    CRITERIA.forEach(c=>{ delete picked[c.key]; document.querySelectorAll(`#scale-${c.key} button`).forEach(b=>b.classList.remove('sel')); });
+    document.getElementById('team').value='';
+    window.scrollTo({top:0,behavior:'smooth'});
+  }catch(e){ banner('Could not save — try again. ('+e.message+')', true); }
+  finally{ btn.disabled=false; btn.textContent='Submit score'; }
+}
+
+async function saveTeams(){
+  const teams = document.getElementById('adminTeams').value.split('\n').map(t=>t.trim()).filter(Boolean);
+  try{ await kvSet('teams', JSON.stringify(teams)); banner('✓ Teams saved — judges see the update on reload.'); loadTeams(); }
+  catch(e){ banner('Could not save teams.', true); }
+}
+
+let lastScores = [];
+async function refreshBoard(){
+  const body = document.getElementById('boardBody'); body.textContent='Loading…';
+  try{
+    const all = await kvAll();
+    lastScores = all.filter(([k])=>k.startsWith('score:')).map(([,v])=>JSON.parse(v));
+    const byTeam = {};
+    lastScores.forEach(s=>{ (byTeam[s.team]=byTeam[s.team]||[]).push(totalOf(s)); });
+    const rows = Object.entries(byTeam).map(([team,ts])=>({team,n:ts.length,avg:ts.reduce((a,b)=>a+b,0)/ts.length})).sort((a,b)=>b.avg-a.avg);
+    body.innerHTML = rows.length
+      ? `<table><tr><th>#</th><th>Team</th><th class="num">Judges</th><th class="num">Avg /100</th></tr>`+rows.map((r,i)=>`<tr class="${i===0?'rank1':''}"><td>${i+1}</td><td>${esc(r.team)}</td><td class="num">${r.n}</td><td class="num">${r.avg.toFixed(1)}</td></tr>`).join('')+'</table>'
+      : 'No scores yet.';
+  }catch(e){ body.textContent='Could not load scores.'; }
+}
+
+function exportCsv(){
+  const head = ['Timestamp','Judge','Team',...CRITERIA.map(c=>c.name+' (1-5)'),'Total /100'];
+  const lines = [head.join(',')].concat(lastScores.map(s=>
+    [s.ts,s.judge,s.team,...CRITERIA.map(c=>s[c.key]), (Math.round(totalOf(s)*10)/10)]
+      .map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')));
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([lines.join('\n')], {type:'text/csv'}));
+  a.download = 'hackathon-scores.csv'; a.click();
+}
+
+function copyLink(kind){
+  const base = location.href.split('#')[0];
+  const url = kind==='judge' ? `${base}#b=${bucket}` : `${base}#b=${bucket}&admin=1`;
+  navigator.clipboard.writeText(url).then(()=>banner('✓ Link copied.'));
+}
+
+// ---- init ----
+(async function init(){
+  show('loading', false);
+  if(!bucket){ show('setup'); return; }
+  if(isAdmin){
+    document.getElementById('subtitle').textContent = 'Organizer dashboard';
+    const base = location.href.split('#')[0];
+    document.getElementById('judgeLink').textContent = `${base}#b=${bucket}`;
+    show('admin'); await loadTeams(); refreshBoard();
+    setInterval(refreshBoard, 30000);
+  } else {
+    renderCriteria(); show('form');
+    try{ await loadTeams(); }catch(e){ banner('Could not load teams — check connection and reload.', true); }
+  }
+})();
+</script>
+</body>
+</html>
