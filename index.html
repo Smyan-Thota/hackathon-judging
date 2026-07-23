@@ -101,7 +101,7 @@
 </div>
 
 <script>
-const KV = 'https://kvdb.io';
+const KV = 'https://jsonblob.com/api/jsonBlob';
 const CRITERIA = [
   {key:'impact',      name:'Real-World Impact',   desc:'Does the solution meaningfully improve a difficult administrative process?', w:30},
   {key:'technical',   name:'Technical Execution', desc:'Does the product work, and has the team used AI thoughtfully?',              w:25},
@@ -124,21 +124,23 @@ async function createBoard(){
   if(!teams.length) return banner('Add at least one team.', true);
   const btn=document.getElementById('createBtn'); btn.disabled=true; btn.textContent='Creating…';
   try{
-    const r = await fetch(KV, {method:'POST', body:new URLSearchParams({email:'hackathon@example.com'})});
-    if(!r.ok) throw new Error('bucket create failed');
-    bucket = (await r.text()).trim();
-    await kvSet('teams', JSON.stringify(teams));
+    const r = await fetch(KV, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({teams, scores:{}})});
+    if(!r.ok) throw new Error('create failed');
+    bucket = r.headers.get('x-jsonblob-id') || (r.headers.get('Location')||'').split('/').pop();
+    if(!bucket) throw new Error('no board id returned');
     location.hash = `b=${bucket}&admin=1`;
     location.reload();
   }catch(e){ banner('Setup failed ('+e.message+'). Check your internet and try again.', true); btn.disabled=false; btn.textContent='Create scoreboard'; }
 }
 
-const kvSet = (key, val) => fetch(`${KV}/${bucket}/${encodeURIComponent(key)}`, {method:'POST', body:val}).then(r=>{ if(!r.ok) throw new Error('write failed'); });
-const kvGet = key => fetch(`${KV}/${bucket}/${encodeURIComponent(key)}`).then(r=> r.ok ? r.text() : null);
-async function kvAll(){
-  const r = await fetch(`${KV}/${bucket}/?values=true&format=json`);
+async function dbGet(){
+  const r = await fetch(`${KV}/${bucket}`);
   if(!r.ok) throw new Error('read failed');
-  return r.json(); // [[key, value], ...]
+  return r.json(); // {teams:[], scores:{"team|judge":{...}}}
+}
+async function dbPut(data){
+  const r = await fetch(`${KV}/${bucket}`, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)});
+  if(!r.ok) throw new Error('write failed');
 }
 
 function renderCriteria(){
@@ -152,8 +154,8 @@ function renderCriteria(){
 function pick(key,n){ picked[key]=n; document.querySelectorAll(`#scale-${key} button`).forEach((b,i)=>b.classList.toggle('sel', i+1===n)); }
 
 async function loadTeams(){
-  const t = await kvGet('teams');
-  const teams = t ? JSON.parse(t) : [];
+  const db = await dbGet();
+  const teams = db.teams || [];
   document.getElementById('team').innerHTML = '<option value="">Select a team…</option>'+teams.map(x=>`<option>${esc(x)}</option>`).join('');
   if(isAdmin) document.getElementById('adminTeams').value = teams.join('\n');
   return teams;
@@ -170,7 +172,10 @@ async function submitScore(){
   try{
     const rec = { judge, team, ts:new Date().toISOString() };
     CRITERIA.forEach(c=>rec[c.key]=picked[c.key]);
-    await kvSet(`score:${team}|${judge}`, JSON.stringify(rec)); // one key per judge+team; re-submit overwrites
+    const db = await dbGet(); // read-modify-write; one entry per judge+team, re-submit overwrites
+    db.scores = db.scores || {};
+    db.scores[`${team}|${judge}`] = rec;
+    await dbPut(db);
     banner(`✓ Saved — ${team}: ${(Math.round(totalOf(rec)*10)/10)} / 100. You can score the next team.`);
     CRITERIA.forEach(c=>{ delete picked[c.key]; document.querySelectorAll(`#scale-${c.key} button`).forEach(b=>b.classList.remove('sel')); });
     document.getElementById('team').value='';
@@ -181,7 +186,7 @@ async function submitScore(){
 
 async function saveTeams(){
   const teams = document.getElementById('adminTeams').value.split('\n').map(t=>t.trim()).filter(Boolean);
-  try{ await kvSet('teams', JSON.stringify(teams)); banner('✓ Teams saved — judges see the update on reload.'); loadTeams(); }
+  try{ const db = await dbGet(); db.teams = teams; await dbPut(db); banner('✓ Teams saved — judges see the update on reload.'); loadTeams(); }
   catch(e){ banner('Could not save teams.', true); }
 }
 
@@ -189,8 +194,8 @@ let lastScores = [];
 async function refreshBoard(){
   const body = document.getElementById('boardBody'); body.textContent='Loading…';
   try{
-    const all = await kvAll();
-    lastScores = all.filter(([k])=>k.startsWith('score:')).map(([,v])=>JSON.parse(v));
+    const db = await dbGet();
+    lastScores = Object.values(db.scores || {});
     const byTeam = {};
     lastScores.forEach(s=>{ (byTeam[s.team]=byTeam[s.team]||[]).push(totalOf(s)); });
     const rows = Object.entries(byTeam).map(([team,ts])=>({team,n:ts.length,avg:ts.reduce((a,b)=>a+b,0)/ts.length})).sort((a,b)=>b.avg-a.avg);
